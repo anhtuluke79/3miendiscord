@@ -8,7 +8,43 @@ from bs4 import BeautifulSoup
 import pandas as pd
 from datetime import datetime, timedelta
 
-# === Crawl từ xosoketqua.com ===
+# === Crawl 30 ngày từ xsmn.mobi ===
+def crawl_xsmb_30ngay_xsmnmobi(csv_path='xs_mienbac_full.csv'):
+    url = "https://xsmn.mobi/xsmb-30-ngay.html"
+    resp = requests.get(url, timeout=15)
+    soup = BeautifulSoup(resp.text, "html.parser")
+    table = soup.find("table", {"class": "kqtinh"})
+    if not table:
+        raise Exception("Không tìm thấy bảng kết quả!")
+    data = []
+    trs = table.find_all("tr")
+    for row in trs[1:]:
+        tds = row.find_all("td")
+        if not tds or len(tds) < 9:
+            continue
+        date = tds[0].text.strip()
+        result = {"date": date}
+        result['DB'] = tds[1].text.strip()
+        result['G1'] = tds[2].text.strip()
+        result['G2'] = tds[3].text.strip()
+        result['G3'] = tds[4].text.strip()
+        result['G4'] = tds[5].text.strip()
+        result['G5'] = tds[6].text.strip()
+        result['G6'] = tds[7].text.strip()
+        result['G7'] = tds[8].text.strip()
+        data.append(result)
+    # Chuẩn hóa ngày sang YYYY-MM-DD
+    for row in data:
+        try:
+            d = datetime.strptime(row['date'], "%d/%m/%Y")
+            row['date'] = d.strftime("%Y-%m-%d")
+        except:
+            pass
+    df = pd.DataFrame(data)
+    df.to_csv(csv_path, index=False, encoding='utf-8-sig')
+    return csv_path, data[0]['date'] if data else None
+
+# === Fallback từng ngày từng nguồn ===
 def crawl_xsmb_xosoketqua(date_dt):
     date_str_url = date_dt.strftime("%d-%m-%Y")
     url = f"https://xosoketqua.com/xsmb-{date_str_url}.html"
@@ -53,7 +89,6 @@ def crawl_xsmb_xosoketqua(date_dt):
         print(f"[xosoketqua] Lỗi: {e}")
         return None
 
-# === Crawl từ xosomn.mobi (dự phòng) ===
 def crawl_xsmb_xosomn(date_dt):
     date_str_url = date_dt.strftime("%d-%m-%Y")
     url = f"https://xosomn.mobi/ket-qua-xo-so-mien-bac/ngay-{date_str_url}"
@@ -98,7 +133,6 @@ def crawl_xsmb_xosomn(date_dt):
         print(f"[xosomn.mobi] Lỗi: {e}")
         return None
 
-# === Hàm crawl tổng hợp (ưu tiên xosoketqua, fallback xosomn) ===
 def crawl_xsmb_multi_source(date_dt):
     result = crawl_xsmb_xosoketqua(date_dt)
     if result:
@@ -111,8 +145,18 @@ def crawl_xsmb_multi_source(date_dt):
     print(f"LỖI: Không crawl được ngày {date_dt.strftime('%Y-%m-%d')} ở mọi nguồn!")
     return None
 
-# === Hàm tổng cho bot, crawl nhiều ngày và chỉ crawl nếu chưa có ngày mới ===
+# === Hàm tổng hợp cho bot (ưu tiên xsmn.mobi 30 ngày, nếu lỗi mới từng ngày từng nguồn) ===
 def crawl_xsmb_to_csv(csv_path='xs_mienbac_full.csv', days=30, notify_if_duplicate=False):
+    # Thử crawl xsmn.mobi trước
+    try:
+        print("[Crawl] Đang lấy 30 ngày từ xsmn.mobi...")
+        path, newest_date = crawl_xsmb_30ngay_xsmnmobi(csv_path)
+        print("[Crawl] Đã lấy thành công 30 ngày mới nhất từ xsmn.mobi.")
+        return True, path, newest_date
+    except Exception as e:
+        print(f"[Crawl] Lỗi khi crawl xsmn.mobi: {e}")
+        print("[Crawl] Thử lấy từng ngày từng nguồn dự phòng...")
+    # Dự phòng: từng ngày từng nguồn như cũ
     last_date = None
     if os.path.exists(csv_path):
         try:
@@ -121,7 +165,6 @@ def crawl_xsmb_to_csv(csv_path='xs_mienbac_full.csv', days=30, notify_if_duplica
                 last_date = max(df_old['date'])
         except Exception:
             pass
-
     data = []
     is_new = False
     for i in range(days):
@@ -154,26 +197,24 @@ def crawl_xsmb_to_csv(csv_path='xs_mienbac_full.csv', days=30, notify_if_duplica
 # === Bot Setup ===
 load_dotenv()
 TOKEN = os.getenv("DISCORD_TOKEN")
-CHANNEL_ID = int(os.getenv("NOTIFY_CHANNEL_ID", "0"))  # Để 0 nếu không dùng gửi thông báo tự crawl
+CHANNEL_ID = int(os.getenv("NOTIFY_CHANNEL_ID", "0"))
 
 intents = discord.Intents.default()
 bot = commands.Bot(command_prefix="!", intents=intents)
 
-# ===== Lệnh crawl thủ công (slash command) =====
-@app_commands.command(name="crawl_xsmb", description="(Admin) Crawl dữ liệu XSMB và lưu file CSV (chỉ khi có ngày mới)")
+@app_commands.command(name="crawl_xsmb", description="(Admin) Crawl dữ liệu XSMB mới nhất (ưu tiên xsmn.mobi)")
 @commands.has_permissions(administrator=True)
-async def crawl_xsmb(interaction: discord.Interaction, days: int = 30):
-    await interaction.response.send_message(f"Đang crawl dữ liệu XSMB {days} ngày gần nhất...", ephemeral=True)
+async def crawl_xsmb(interaction: discord.Interaction):
+    await interaction.response.send_message(f"Đang crawl dữ liệu XSMB mới nhất...", ephemeral=True)
     try:
-        is_new, path, newest_date = crawl_xsmb_to_csv('xs_mienbac_full.csv', days)
+        is_new, path, newest_date = crawl_xsmb_to_csv('xs_mienbac_full.csv', 30)
         if is_new:
-            await interaction.followup.send(f"✅ Đã crawl xong dữ liệu ngày {newest_date}, lưu vào `{path}`.", ephemeral=True)
+            await interaction.followup.send(f"✅ Đã crawl xong dữ liệu mới nhất ({newest_date}), lưu vào `{path}`.", ephemeral=True)
         else:
             await interaction.followup.send(f"ℹ️ Dữ liệu ngày hôm nay đã tồn tại trong file `{path}`, không crawl thêm.", ephemeral=True)
     except Exception as e:
         await interaction.followup.send(f"❌ Lỗi crawl: {e}", ephemeral=True)
 
-# ===== Lệnh tải file CSV =====
 @app_commands.command(name="download_xsmb", description="(Admin) Gửi file CSV dữ liệu XSMB mới nhất")
 @commands.has_permissions(administrator=True)
 async def download_xsmb(interaction: discord.Interaction):
@@ -184,7 +225,6 @@ async def download_xsmb(interaction: discord.Interaction):
     else:
         await interaction.response.send_message("⚠️ File dữ liệu chưa tồn tại!", ephemeral=True)
 
-# ===== Tự động crawl mỗi ngày (6h VN ~23h UTC) =====
 @tasks.loop(hours=24)
 async def auto_crawl_xsmb():
     print("[Auto Crawl] Đang crawl dữ liệu XSMB tự động...")
@@ -194,7 +234,7 @@ async def auto_crawl_xsmb():
     if is_new and CHANNEL_ID:
         channel = bot.get_channel(CHANNEL_ID)
         if channel:
-            await channel.send(f"✅ Đã tự động crawl XSMB và cập nhật dữ liệu ngày {crawl_date} ({now})!")
+            await channel.send(f"✅ Đã tự động crawl XSMB và cập nhật dữ liệu mới nhất ({crawl_date})!")
     elif not is_new:
         print("[Auto Crawl] Đã có dữ liệu ngày mới, không crawl thêm.")
 
@@ -208,7 +248,6 @@ async def before_auto_crawl():
         target += timedelta(days=1)
     await discord.utils.sleep_until(target)
 
-# ===== Setup tree, event =====
 @bot.event
 async def on_ready():
     print(f'Đã đăng nhập bot: {bot.user}')
@@ -220,9 +259,4 @@ async def on_ready():
     auto_crawl_xsmb.start()
 
 async def setup_hook():
-    bot.tree.add_command(crawl_xsmb)
-    bot.tree.add_command(download_xsmb)
-
-bot.setup_hook = setup_hook
-
-bot.run(TOKEN)
+    bot.tree.add_command(craw_
