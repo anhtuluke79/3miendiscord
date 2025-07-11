@@ -11,11 +11,9 @@ from datetime import datetime, timedelta
 # === Crawl XSMB từ xosoketqua.com ===
 def crawl_xsmb_to_csv(csv_path='xs_mienbac_full.csv', days=30, notify_if_duplicate=False):
     """
-    Crawl XSMB từ xosoketqua.com, chỉ crawl nếu có ngày mới.
-    Trả về: (is_new: bool, file_path: str, crawl_date: str)
+    Crawl XSMB từ xosoketqua.com dạng link: xsmb-DD-MM-YYYY.html
     """
-    base_url = "https://xosoketqua.com/xo-so-mien-bac-ngay-{}.html"
-    # Đọc ngày mới nhất trong file csv (nếu có)
+    base_url = "https://xosoketqua.com/xsmb-{}.html"  # VD: xsmb-11-07-2025.html
     last_date = None
     if os.path.exists(csv_path):
         try:
@@ -29,18 +27,19 @@ def crawl_xsmb_to_csv(csv_path='xs_mienbac_full.csv', days=30, notify_if_duplica
     is_new = False
     for i in range(days):
         date_dt = datetime.today() - timedelta(days=i)
-        date_str = date_dt.strftime("%Y-%m-%d")
-        if i == 0 and last_date == date_str:
+        date_str_csv = date_dt.strftime("%Y-%m-%d")       # Lưu vào csv
+        date_str_url = date_dt.strftime("%d-%m-%Y")       # Dùng cho URL
+        if i == 0 and last_date == date_str_csv:
             if notify_if_duplicate:
                 print("[Crawl] Ngày hôm nay đã có trong file CSV, không crawl thêm.")
             break  # Đã có dữ liệu hôm nay, không crawl tiếp!
-        url = base_url.format(date_str)
+        url = base_url.format(date_str_url)
         resp = requests.get(url)
         soup = BeautifulSoup(resp.text, "html.parser")
         table = soup.find("table", {"id": "result_tab_mb"})
         if not table:
             continue
-        result = {'date': date_str}
+        result = {'date': date_str_csv}
         trs = table.find_all("tr")
         for tr in trs:
             tds = tr.find_all("td")
@@ -78,7 +77,6 @@ def crawl_xsmb_to_csv(csv_path='xs_mienbac_full.csv', days=30, notify_if_duplica
         try:
             df_old = pd.read_csv(csv_path)
             df_new = pd.DataFrame(data)
-            # Giữ các ngày không trùng lặp
             df_all = pd.concat([df_new, df_old], ignore_index=True).drop_duplicates(subset=['date'], keep='first')
         except Exception:
             df_all = pd.DataFrame(data)
@@ -87,6 +85,7 @@ def crawl_xsmb_to_csv(csv_path='xs_mienbac_full.csv', days=30, notify_if_duplica
     df_all = df_all.sort_values('date', ascending=False)
     df_all.to_csv(csv_path, index=False, encoding='utf-8-sig')
     return is_new, csv_path, data[0]['date'] if data else None
+
 
 # === Bot Setup ===
 load_dotenv()
