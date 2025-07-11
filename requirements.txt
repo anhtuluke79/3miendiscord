@@ -1,5 +1,5 @@
 discord.py
 python-dotenv
-tensorflow
-numpy
+requests
+beautifulsoup4
 pandas
