@@ -258,5 +258,4 @@ async def on_ready():
         print(e)
     auto_crawl_xsmb.start()
 
-async def setup_hook():
-    bot.tree.add_command(craw_
+bot.run(TOKEN)
