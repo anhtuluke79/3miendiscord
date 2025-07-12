@@ -5,7 +5,7 @@ from tensorflow.keras.models import load_model
 lstm_model = load_model('lstm_seq2seq_mb.h5')
 
 def preprocess_input():
-    data = pd.read_csv('xs_mienbac_full.csv')
+    data = pd.read_csv('xsmb.csv')
     data = data.sort_values('date')
     db_list = data['DB'].astype(str).str[-2:].astype(int).values
     # Lấy 14 ngày gần nhất để dự đoán 5 ngày tiếp
