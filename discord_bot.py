@@ -44,6 +44,44 @@ def crawl_xsmb_30ngay_xsmnmobi(csv_path='xs_mienbac_full.csv'):
     df.to_csv(csv_path, index=False, encoding='utf-8-sig')
     return csv_path, data[0]['date'] if data else None
 
+# === Crawl truyền thống backup lâu năm ===
+def crawl_xsmb_truyen_thong_xsmnmobi(csv_path='xsmb_truyenthong.csv', max_rows=1000):
+    url = "https://xsmn.mobi/so-ket-qua-truyen-thong.html"
+    resp = requests.get(url, timeout=20)
+    soup = BeautifulSoup(resp.text, "html.parser")
+    table = soup.find("table", {"class": "kqtinh"})
+    if not table:
+        raise Exception("Không tìm thấy bảng kết quả truyền thống!")
+    data = []
+    trs = table.find_all("tr")
+    for row in trs[1:]:
+        tds = row.find_all("td")
+        if not tds or len(tds) < 10:
+            continue
+        date = tds[0].text.strip()
+        result = {"date": date}
+        result['DB'] = tds[1].text.strip()
+        result['G1'] = tds[2].text.strip()
+        result['G2'] = tds[3].text.strip()
+        result['G3'] = tds[4].text.strip()
+        result['G4'] = tds[5].text.strip()
+        result['G5'] = tds[6].text.strip()
+        result['G6'] = tds[7].text.strip()
+        result['G7'] = tds[8].text.strip()
+        data.append(result)
+        if len(data) >= max_rows:
+            break
+    # Chuẩn hóa ngày sang YYYY-MM-DD
+    for row in data:
+        try:
+            d = datetime.strptime(row['date'], "%d/%m/%Y")
+            row['date'] = d.strftime("%Y-%m-%d")
+        except:
+            pass
+    df = pd.DataFrame(data)
+    df.to_csv(csv_path, index=False, encoding='utf-8-sig')
+    return csv_path, data[0]['date'] if data else None
+
 # === Fallback từng ngày từng nguồn ===
 def crawl_xsmb_xosoketqua(date_dt):
     date_str_url = date_dt.strftime("%d-%m-%Y")
@@ -147,7 +185,6 @@ def crawl_xsmb_multi_source(date_dt):
 
 # === Hàm tổng hợp cho bot (ưu tiên xsmn.mobi 30 ngày, nếu lỗi mới từng ngày từng nguồn) ===
 def crawl_xsmb_to_csv(csv_path='xs_mienbac_full.csv', days=30, notify_if_duplicate=False):
-    # Thử crawl xsmn.mobi trước
     try:
         print("[Crawl] Đang lấy 30 ngày từ xsmn.mobi...")
         path, newest_date = crawl_xsmb_30ngay_xsmnmobi(csv_path)
@@ -156,7 +193,6 @@ def crawl_xsmb_to_csv(csv_path='xs_mienbac_full.csv', days=30, notify_if_duplica
     except Exception as e:
         print(f"[Crawl] Lỗi khi crawl xsmn.mobi: {e}")
         print("[Crawl] Thử lấy từng ngày từng nguồn dự phòng...")
-    # Dự phòng: từng ngày từng nguồn như cũ
     last_date = None
     if os.path.exists(csv_path):
         try:
@@ -180,7 +216,6 @@ def crawl_xsmb_to_csv(csv_path='xs_mienbac_full.csv', days=30, notify_if_duplica
             if i == 0: is_new = True
         else:
             print(f"[Crawl] Bỏ qua ngày {date_str_csv} vì không lấy được.")
-    # Gộp với dữ liệu cũ nếu có
     if os.path.exists(csv_path):
         try:
             df_old = pd.read_csv(csv_path)
@@ -202,6 +237,7 @@ CHANNEL_ID = int(os.getenv("NOTIFY_CHANNEL_ID", "0"))
 intents = discord.Intents.default()
 bot = commands.Bot(command_prefix="!", intents=intents)
 
+# Lệnh crawl XSMB mới nhất (ưu tiên xsmn.mobi)
 @app_commands.command(name="crawl_xsmb", description="(Admin) Crawl dữ liệu XSMB mới nhất (ưu tiên xsmn.mobi)")
 @commands.has_permissions(administrator=True)
 async def crawl_xsmb(interaction: discord.Interaction):
@@ -215,6 +251,7 @@ async def crawl_xsmb(interaction: discord.Interaction):
     except Exception as e:
         await interaction.followup.send(f"❌ Lỗi crawl: {e}", ephemeral=True)
 
+# Lệnh tải file CSV
 @app_commands.command(name="download_xsmb", description="(Admin) Gửi file CSV dữ liệu XSMB mới nhất")
 @commands.has_permissions(administrator=True)
 async def download_xsmb(interaction: discord.Interaction):
@@ -225,6 +262,18 @@ async def download_xsmb(interaction: discord.Interaction):
     else:
         await interaction.response.send_message("⚠️ File dữ liệu chưa tồn tại!", ephemeral=True)
 
+# Lệnh crawl dữ liệu truyền thống backup lâu năm
+@app_commands.command(name="crawl_truyenthong", description="(Admin) Crawl XSMB truyền thống (backup nhiều năm)")
+@commands.has_permissions(administrator=True)
+async def crawl_truyenthong(interaction: discord.Interaction, max_rows: int = 500):
+    await interaction.response.send_message(f"Đang crawl dữ liệu XSMB truyền thống (tối đa {max_rows} ngày)...", ephemeral=True)
+    try:
+        path, newest_date = crawl_xsmb_truyen_thong_xsmnmobi('xsmb_truyenthong.csv', max_rows)
+        await interaction.followup.send(f"✅ Đã crawl xong dữ liệu, lưu vào `{path}`. Ngày mới nhất: {newest_date}", ephemeral=True)
+    except Exception as e:
+        await interaction.followup.send(f"❌ Lỗi crawl: {e}", ephemeral=True)
+
+# Tự động crawl mỗi ngày (6h VN ~23h UTC)
 @tasks.loop(hours=24)
 async def auto_crawl_xsmb():
     print("[Auto Crawl] Đang crawl dữ liệu XSMB tự động...")
