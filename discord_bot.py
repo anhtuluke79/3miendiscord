@@ -237,6 +237,7 @@ GUILD_ID = int(os.getenv("GUILD_ID", "0"))  # Thay bằng ID server của bạn
 intents = discord.Intents.default()
 bot = commands.Bot(command_prefix="!", intents=intents)
 
+# Slash Command ĐỊNH NGHĨA NGOÀI COG, PHẢI ĐĂNG KÝ THỦ CÔNG!
 @app_commands.command(name="crawl_xsmb", description="(Admin) Crawl dữ liệu XSMB mới nhất (ưu tiên xsmn.mobi)")
 async def crawl_xsmb(interaction: discord.Interaction):
     if not interaction.user.guild_permissions.administrator:
@@ -298,6 +299,7 @@ async def before_auto_crawl():
         target += timedelta(days=1)
     await discord.utils.sleep_until(target)
 
+# ĐĂNG KÝ LỆNH SLASH VÀO TREE
 bot.tree.add_command(crawl_xsmb)
 bot.tree.add_command(download_xsmb)
 bot.tree.add_command(crawl_truyenthong)
