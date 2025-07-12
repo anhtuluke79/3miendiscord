@@ -298,6 +298,10 @@ async def before_auto_crawl():
         target += timedelta(days=1)
     await discord.utils.sleep_until(target)
 
+bot.tree.add_command(crawl_xsmb)
+bot.tree.add_command(download_xsmb)
+bot.tree.add_command(crawl_truyenthong)
+
 @bot.event
 async def on_ready():
     print(f'Đã đăng nhập bot: {bot.user}')
