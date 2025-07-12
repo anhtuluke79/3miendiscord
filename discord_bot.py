@@ -16,18 +16,18 @@ HEADERS = {
     )
 }
 
-def crawl_xsmb_minhngoc(csv_path='xsmb_minhngoc.csv', days=30):
+def crawl_xsmb_xosome(csv_path='xsmb_xosome.csv', days=30):
     data = []
     for i in range(days):
         date_dt = datetime.today() - timedelta(days=i)
-        date_str_url = date_dt.strftime("%d-%m-%Y")
-        url = f"https://www.minhngoc.net.vn/ket-qua-xo-so/mien-bac/{date_str_url}.html"
+        date_str_url = date_dt.strftime("%Y-%m-%d")
+        url = f"https://xoso.me/ket-qua-xo-so-mien-bac-ngay-{date_str_url}.html"
         try:
             resp = requests.get(url, timeout=15, headers=HEADERS)
             soup = BeautifulSoup(resp.text, "html.parser")
-            table = soup.find("table", {"id": "mb_kq_table"})
+            table = soup.find("table", {"class": "tblKQXSMB"})
             if not table:
-                print(f"[minhngoc] Không tìm thấy table ngày {date_str_url}")
+                print(f"[xoso.me] Không tìm thấy bảng kết quả ngày {date_str_url}")
                 continue
             result = {'date': date_dt.strftime("%Y-%m-%d")}
             for tr in table.find_all("tr"):
@@ -35,48 +35,48 @@ def crawl_xsmb_minhngoc(csv_path='xsmb_minhngoc.csv', days=30):
                 if len(tds) < 2: continue
                 label = tds[0].get_text(strip=True)
                 nums = tds[1].get_text(strip=True).replace('\n', '').replace(' ', '-')
-                if label.startswith("ĐB"):
+                if "Đặc biệt" in label or "ĐB" in label:
                     result["DB"] = nums
-                elif label.startswith("Nhất"):
+                elif "Nhất" in label:
                     result["G1"] = nums
-                elif label.startswith("Nhì"):
+                elif "Nhì" in label:
                     result["G2"] = nums
-                elif label.startswith("Ba"):
+                elif "Ba" in label:
                     result["G3"] = nums
-                elif label.startswith("Tư"):
+                elif "Tư" in label:
                     result["G4"] = nums
-                elif label.startswith("Năm"):
+                elif "Năm" in label:
                     result["G5"] = nums
-                elif label.startswith("Sáu"):
+                elif "Sáu" in label:
                     result["G6"] = nums
-                elif label.startswith("Bảy"):
+                elif "Bảy" in label:
                     result["G7"] = nums
             data.append(result)
         except Exception as e:
-            print(f"[minhngoc] Lỗi ngày {date_str_url}: {e}")
+            print(f"[xoso.me] Lỗi ngày {date_str_url}: {e}")
     if data:
         pd.DataFrame(data).to_csv(csv_path, index=False, encoding='utf-8-sig')
         return True, csv_path, data[0]['date']
     else:
-        raise Exception("Không crawl được dữ liệu nào từ minhngoc.net.vn!")
+        raise Exception("Không crawl được dữ liệu nào từ xoso.me!")
 
 # ==== BOT SETUP ====
 load_dotenv()
 TOKEN = os.getenv("DISCORD_TOKEN")
 CHANNEL_ID = int(os.getenv("NOTIFY_CHANNEL_ID", "0"))
-GUILD_ID = int(os.getenv("GUILD_ID", "0"))  # Thay bằng ID server của bạn nếu muốn sync lệnh nhanh hơn
+GUILD_ID = int(os.getenv("GUILD_ID", "0"))  # Để sync lệnh nhanh, không cần thì để 0
 
 intents = discord.Intents.default()
 bot = commands.Bot(command_prefix="!", intents=intents)
 
-@app_commands.command(name="crawl_xsmb", description="(Admin) Crawl dữ liệu XSMB từ minhngoc.net.vn (30 ngày)")
+@app_commands.command(name="crawl_xsmb", description="(Admin) Crawl dữ liệu XSMB từ xoso.me (30 ngày)")
 async def crawl_xsmb(interaction: discord.Interaction):
     if not interaction.user.guild_permissions.administrator:
         await interaction.response.send_message("Bạn không có quyền sử dụng lệnh này.", ephemeral=True)
         return
-    await interaction.response.send_message("Đang crawl dữ liệu XSMB mới nhất từ minhngoc.net.vn...", ephemeral=True)
+    await interaction.response.send_message("Đang crawl dữ liệu XSMB mới nhất từ xoso.me...", ephemeral=True)
     try:
-        is_new, path, newest_date = crawl_xsmb_minhngoc('xsmb_minhngoc.csv', 30)
+        is_new, path, newest_date = crawl_xsmb_xosome('xsmb_xosome.csv', 30)
         await interaction.followup.send(f"✅ Đã crawl xong dữ liệu ({newest_date}), lưu vào `{path}`.", ephemeral=True)
     except Exception as e:
         await interaction.followup.send(f"❌ Lỗi crawl: {e}", ephemeral=True)
@@ -86,7 +86,7 @@ async def download_xsmb(interaction: discord.Interaction):
     if not interaction.user.guild_permissions.administrator:
         await interaction.response.send_message("Bạn không có quyền sử dụng lệnh này.", ephemeral=True)
         return
-    csv_path = 'xsmb_minhngoc.csv'
+    csv_path = 'xsmb_xosome.csv'
     if os.path.exists(csv_path):
         await interaction.response.send_message("Đây là file dữ liệu XSMB mới nhất:", ephemeral=True)
         await interaction.followup.send(file=discord.File(csv_path), ephemeral=True)
@@ -97,13 +97,13 @@ async def download_xsmb(interaction: discord.Interaction):
 async def auto_crawl_xsmb():
     print("[Auto Crawl] Đang crawl dữ liệu XSMB tự động...")
     try:
-        is_new, path, crawl_date = crawl_xsmb_minhngoc('xsmb_minhngoc.csv', 30)
+        is_new, path, crawl_date = crawl_xsmb_xosome('xsmb_xosome.csv', 30)
         now = datetime.now().strftime('%d-%m-%Y %H:%M')
         print(f"[Auto Crawl] Đã crawl dữ liệu | {now}")
         if is_new and CHANNEL_ID:
             channel = bot.get_channel(CHANNEL_ID)
             if channel:
-                await channel.send(f"✅ Đã tự động crawl XSMB ({crawl_date}) từ minhngoc.net.vn!")
+                await channel.send(f"✅ Đã tự động crawl XSMB ({crawl_date}) từ xoso.me!")
     except Exception as e:
         print(f"[Auto Crawl] Lỗi: {e}")
 
