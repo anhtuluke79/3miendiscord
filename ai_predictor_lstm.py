@@ -5,7 +5,7 @@ from tensorflow.keras.models import load_model
 lstm_model = load_model('lstm_model_mb.h5')
 
 def preprocess_input():
-    data = pd.read_csv('xsmb.csv')
+    data = pd.read_csv('xs_mienbac_full.csv')
     data = data.sort_values('date')
     data['DB2'] = data['DB'].astype(str).str[-2:].astype(int)
     db_list = data['DB2'].values
