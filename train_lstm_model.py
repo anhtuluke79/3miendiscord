@@ -5,7 +5,7 @@ from tensorflow.keras.layers import LSTM, Dense
 from tensorflow.keras.callbacks import EarlyStopping
 
 # Đọc dữ liệu
-data = pd.read_csv('xsmb.csv')
+data = pd.read_csv('xs_mienbac_full.csv')
 data = data.sort_values('date')  # Đảm bảo theo đúng thứ tự thời gian
 
 # Giả sử chỉ lấy 2 số cuối giải DB làm đầu ra, biến thành số nguyên
