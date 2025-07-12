@@ -183,7 +183,6 @@ def crawl_xsmb_multi_source(date_dt):
     print(f"LỖI: Không crawl được ngày {date_dt.strftime('%Y-%m-%d')} ở mọi nguồn!")
     return None
 
-# === Hàm tổng hợp cho bot (ưu tiên xsmn.mobi 30 ngày, nếu lỗi mới từng ngày từng nguồn) ===
 def crawl_xsmb_to_csv(csv_path='xs_mienbac_full.csv', days=30, notify_if_duplicate=False):
     try:
         print("[Crawl] Đang lấy 30 ngày từ xsmn.mobi...")
@@ -229,18 +228,20 @@ def crawl_xsmb_to_csv(csv_path='xs_mienbac_full.csv', days=30, notify_if_duplica
     df_all.to_csv(csv_path, index=False, encoding='utf-8-sig')
     return is_new, csv_path, data[0]['date'] if data else None
 
-# === Bot Setup ===
+# ==== BOT SETUP ====
 load_dotenv()
 TOKEN = os.getenv("DISCORD_TOKEN")
 CHANNEL_ID = int(os.getenv("NOTIFY_CHANNEL_ID", "0"))
+GUILD_ID = int(os.getenv("GUILD_ID", "0"))  # Thay bằng ID server của bạn
 
 intents = discord.Intents.default()
 bot = commands.Bot(command_prefix="!", intents=intents)
 
-# Lệnh crawl XSMB mới nhất (ưu tiên xsmn.mobi)
 @app_commands.command(name="crawl_xsmb", description="(Admin) Crawl dữ liệu XSMB mới nhất (ưu tiên xsmn.mobi)")
-@commands.has_permissions(administrator=True)
 async def crawl_xsmb(interaction: discord.Interaction):
+    if not interaction.user.guild_permissions.administrator:
+        await interaction.response.send_message("Bạn không có quyền sử dụng lệnh này.", ephemeral=True)
+        return
     await interaction.response.send_message(f"Đang crawl dữ liệu XSMB mới nhất...", ephemeral=True)
     try:
         is_new, path, newest_date = crawl_xsmb_to_csv('xs_mienbac_full.csv', 30)
@@ -251,10 +252,11 @@ async def crawl_xsmb(interaction: discord.Interaction):
     except Exception as e:
         await interaction.followup.send(f"❌ Lỗi crawl: {e}", ephemeral=True)
 
-# Lệnh tải file CSV
 @app_commands.command(name="download_xsmb", description="(Admin) Gửi file CSV dữ liệu XSMB mới nhất")
-@commands.has_permissions(administrator=True)
 async def download_xsmb(interaction: discord.Interaction):
+    if not interaction.user.guild_permissions.administrator:
+        await interaction.response.send_message("Bạn không có quyền sử dụng lệnh này.", ephemeral=True)
+        return
     csv_path = 'xs_mienbac_full.csv'
     if os.path.exists(csv_path):
         await interaction.response.send_message("Đây là file dữ liệu XSMB mới nhất:", ephemeral=True)
@@ -262,10 +264,11 @@ async def download_xsmb(interaction: discord.Interaction):
     else:
         await interaction.response.send_message("⚠️ File dữ liệu chưa tồn tại!", ephemeral=True)
 
-# Lệnh crawl dữ liệu truyền thống backup lâu năm
 @app_commands.command(name="crawl_truyenthong", description="(Admin) Crawl XSMB truyền thống (backup nhiều năm)")
-@commands.has_permissions(administrator=True)
 async def crawl_truyenthong(interaction: discord.Interaction, max_rows: int = 500):
+    if not interaction.user.guild_permissions.administrator:
+        await interaction.response.send_message("Bạn không có quyền sử dụng lệnh này.", ephemeral=True)
+        return
     await interaction.response.send_message(f"Đang crawl dữ liệu XSMB truyền thống (tối đa {max_rows} ngày)...", ephemeral=True)
     try:
         path, newest_date = crawl_xsmb_truyen_thong_xsmnmobi('xsmb_truyenthong.csv', max_rows)
@@ -273,7 +276,6 @@ async def crawl_truyenthong(interaction: discord.Interaction, max_rows: int = 50
     except Exception as e:
         await interaction.followup.send(f"❌ Lỗi crawl: {e}", ephemeral=True)
 
-# Tự động crawl mỗi ngày (6h VN ~23h UTC)
 @tasks.loop(hours=24)
 async def auto_crawl_xsmb():
     print("[Auto Crawl] Đang crawl dữ liệu XSMB tự động...")
@@ -290,7 +292,6 @@ async def auto_crawl_xsmb():
 @auto_crawl_xsmb.before_loop
 async def before_auto_crawl():
     await bot.wait_until_ready()
-    # Đợi đến 23h UTC (6h VN) lần đầu
     now = datetime.utcnow()
     target = now.replace(hour=23, minute=0, second=0, microsecond=0)
     if now > target:
@@ -301,8 +302,13 @@ async def before_auto_crawl():
 async def on_ready():
     print(f'Đã đăng nhập bot: {bot.user}')
     try:
-        synced = await bot.tree.sync()
-        print(f"Đã sync {len(synced)} lệnh slash.")
+        guild = discord.Object(id=GUILD_ID) if GUILD_ID else None
+        if guild:
+            synced = await bot.tree.sync(guild=guild)
+            print(f"Đã sync {len(synced)} lệnh slash (theo guild).")
+        else:
+            synced = await bot.tree.sync()
+            print(f"Đã sync {len(synced)} lệnh slash (global).")
     except Exception as e:
         print(e)
     auto_crawl_xsmb.start()
