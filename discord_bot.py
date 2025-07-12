@@ -8,10 +8,18 @@ from bs4 import BeautifulSoup
 import pandas as pd
 from datetime import datetime, timedelta
 
+HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/122.0.0.0 Safari/537.36"
+    )
+}
+
 # === Crawl 30 ngày từ xsmn.mobi với DEBUG ===
 def crawl_xsmb_30ngay_xsmnmobi(csv_path='xs_mienbac_full.csv'):
     url = "https://xsmn.mobi/xsmb-30-ngay.html"
-    resp = requests.get(url, timeout=15)
+    resp = requests.get(url, timeout=15, headers=HEADERS)
     soup = BeautifulSoup(resp.text, "html.parser")
     table = soup.find("table", {"class": "kqtinh"})
     if not table:
@@ -50,7 +58,7 @@ def crawl_xsmb_30ngay_xsmnmobi(csv_path='xs_mienbac_full.csv'):
 # === Crawl truyền thống backup lâu năm với DEBUG ===
 def crawl_xsmb_truyen_thong_xsmnmobi(csv_path='xsmb_truyenthong.csv', max_rows=1000):
     url = "https://xsmn.mobi/so-ket-qua-truyen-thong.html"
-    resp = requests.get(url, timeout=20)
+    resp = requests.get(url, timeout=20, headers=HEADERS)
     soup = BeautifulSoup(resp.text, "html.parser")
     table = soup.find("table", {"class": "kqtinh"})
     if not table:
@@ -93,7 +101,7 @@ def crawl_xsmb_xosoketqua(date_dt):
     date_str_url = date_dt.strftime("%d-%m-%Y")
     url = f"https://xosoketqua.com/xsmb-{date_str_url}.html"
     try:
-        resp = requests.get(url, timeout=10)
+        resp = requests.get(url, timeout=10, headers=HEADERS)
         soup = BeautifulSoup(resp.text, "html.parser")
         table = soup.find("table", {"id": "result_tab_mb"})
         if not table:
@@ -139,7 +147,7 @@ def crawl_xsmb_xosomn(date_dt):
     date_str_url = date_dt.strftime("%d-%m-%Y")
     url = f"https://xosomn.mobi/ket-qua-xo-so-mien-bac/ngay-{date_str_url}"
     try:
-        resp = requests.get(url, timeout=10)
+        resp = requests.get(url, timeout=10, headers=HEADERS)
         soup = BeautifulSoup(resp.text, "html.parser")
         table = soup.find("table", {"class": "bkqmienbac"})
         if not table:
