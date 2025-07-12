@@ -16,299 +16,94 @@ HEADERS = {
     )
 }
 
-# === Crawl 30 ngày từ xsmn.mobi với DEBUG ===
-def crawl_xsmb_30ngay_xsmnmobi(csv_path='xs_mienbac_full.csv'):
-    url = "https://xsmn.mobi/xsmb-30-ngay.html"
-    resp = requests.get(url, timeout=15, headers=HEADERS)
-    soup = BeautifulSoup(resp.text, "html.parser")
-    table = soup.find("table", {"class": "kqtinh"})
-    if not table:
-        print("\n====== DEBUG HTML (30 ngày) ======\n", soup.prettify()[:2000])
-        raise Exception("Không tìm thấy bảng kết quả!")
+def crawl_xsmb_minhngoc(csv_path='xsmb_minhngoc.csv', days=30):
     data = []
-    trs = table.find_all("tr")
-    for row in trs[1:]:
-        tds = row.find_all("td")
-        if not tds or len(tds) < 9:
-            continue
-        date = tds[0].text.strip()
-        result = {"date": date}
-        result['DB'] = tds[1].text.strip()
-        result['G1'] = tds[2].text.strip()
-        result['G2'] = tds[3].text.strip()
-        result['G3'] = tds[4].text.strip()
-        result['G4'] = tds[5].text.strip()
-        result['G5'] = tds[6].text.strip()
-        result['G6'] = tds[7].text.strip()
-        result['G7'] = tds[8].text.strip()
-        data.append(result)
-    print("DEBUG data 30ngay:", data[:2])
-    if not data:
-        raise Exception("Không lấy được dữ liệu nào từ bảng!")
-    for row in data:
-        try:
-            d = datetime.strptime(row['date'], "%d/%m/%Y")
-            row['date'] = d.strftime("%Y-%m-%d")
-        except:
-            pass
-    df = pd.DataFrame(data)
-    df.to_csv(csv_path, index=False, encoding='utf-8-sig')
-    return csv_path, data[0]['date']
-
-# === Crawl truyền thống backup lâu năm với DEBUG ===
-def crawl_xsmb_truyen_thong_xsmnmobi(csv_path='xsmb_truyenthong.csv', max_rows=1000):
-    url = "https://xsmn.mobi/so-ket-qua-truyen-thong.html"
-    resp = requests.get(url, timeout=20, headers=HEADERS)
-    soup = BeautifulSoup(resp.text, "html.parser")
-    table = soup.find("table", {"class": "kqtinh"})
-    if not table:
-        print("\n====== DEBUG HTML (truyền thống) ======\n", soup.prettify()[:2000])
-        raise Exception("Không tìm thấy bảng kết quả truyền thống!")
-    data = []
-    trs = table.find_all("tr")
-    for row in trs[1:]:
-        tds = row.find_all("td")
-        if not tds or len(tds) < 10:
-            continue
-        date = tds[0].text.strip()
-        result = {"date": date}
-        result['DB'] = tds[1].text.strip()
-        result['G1'] = tds[2].text.strip()
-        result['G2'] = tds[3].text.strip()
-        result['G3'] = tds[4].text.strip()
-        result['G4'] = tds[5].text.strip()
-        result['G5'] = tds[6].text.strip()
-        result['G6'] = tds[7].text.strip()
-        result['G7'] = tds[8].text.strip()
-        data.append(result)
-        if len(data) >= max_rows:
-            break
-    print("DEBUG data truyenthong:", data[:2])
-    if not data:
-        raise Exception("Không lấy được dữ liệu nào từ bảng truyền thống!")
-    for row in data:
-        try:
-            d = datetime.strptime(row['date'], "%d/%m/%Y")
-            row['date'] = d.strftime("%Y-%m-%d")
-        except:
-            pass
-    df = pd.DataFrame(data)
-    df.to_csv(csv_path, index=False, encoding='utf-8-sig')
-    return csv_path, data[0]['date']
-
-# === Fallback từng ngày từng nguồn ===
-def crawl_xsmb_xosoketqua(date_dt):
-    date_str_url = date_dt.strftime("%d-%m-%Y")
-    url = f"https://xosoketqua.com/xsmb-{date_str_url}.html"
-    try:
-        resp = requests.get(url, timeout=10, headers=HEADERS)
-        soup = BeautifulSoup(resp.text, "html.parser")
-        table = soup.find("table", {"id": "result_tab_mb"})
-        if not table:
-            print("[DEBUG] Không tìm thấy bảng result_tab_mb trên xosoketqua!")
-            return None
-        result = {'date': date_dt.strftime("%Y-%m-%d")}
-        trs = table.find_all("tr")
-        for tr in trs:
-            tds = tr.find_all("td")
-            if not tds: continue
-            label = tds[0].text.strip()
-            numbers = tds[1].text.strip().split('-')
-            numbers = [x.strip() for x in numbers if x.strip()]
-            if label.startswith("ĐB"):
-                result['DB'] = numbers[0] if numbers else ""
-            elif label.startswith("Nhất"):
-                result['G1'] = numbers[0] if numbers else ""
-            elif label.startswith("Nhì"):
-                for j, num in enumerate(numbers):
-                    result[f'G2_{j+1}'] = num
-            elif label.startswith("Ba"):
-                for j, num in enumerate(numbers):
-                    result[f'G3_{j+1}'] = num
-            elif label.startswith("Tư"):
-                for j, num in enumerate(numbers):
-                    result[f'G4_{j+1}'] = num
-            elif label.startswith("Năm"):
-                for j, num in enumerate(numbers):
-                    result[f'G5_{j+1}'] = num
-            elif label.startswith("Sáu"):
-                for j, num in enumerate(numbers):
-                    result[f'G6_{j+1}'] = num
-            elif label.startswith("Bảy"):
-                for j, num in enumerate(numbers):
-                    result[f'G7_{j+1}'] = num
-        print("DEBUG data xosoketqua:", result)
-        return result
-    except Exception as e:
-        print(f"[xosoketqua] Lỗi: {e}")
-        return None
-
-def crawl_xsmb_xosomn(date_dt):
-    date_str_url = date_dt.strftime("%d-%m-%Y")
-    url = f"https://xosomn.mobi/ket-qua-xo-so-mien-bac/ngay-{date_str_url}"
-    try:
-        resp = requests.get(url, timeout=10, headers=HEADERS)
-        soup = BeautifulSoup(resp.text, "html.parser")
-        table = soup.find("table", {"class": "bkqmienbac"})
-        if not table:
-            print("[DEBUG] Không tìm thấy bảng bkqmienbac trên xosomn.mobi!")
-            return None
-        result = {'date': date_dt.strftime("%Y-%m-%d")}
-        trs = table.find_all("tr")
-        for tr in trs:
-            tds = tr.find_all("td")
-            if not tds: continue
-            label = tds[0].text.strip()
-            numbers = tds[1].text.strip().split(' ')
-            numbers = [x.strip() for x in numbers if x.strip()]
-            if label.startswith("Đặc biệt"):
-                result['DB'] = numbers[0] if numbers else ""
-            elif label.startswith("Giải nhất"):
-                result['G1'] = numbers[0] if numbers else ""
-            elif label.startswith("Giải nhì"):
-                for j, num in enumerate(numbers):
-                    result[f'G2_{j+1}'] = num
-            elif label.startswith("Giải ba"):
-                for j, num in enumerate(numbers):
-                    result[f'G3_{j+1}'] = num
-            elif label.startswith("Giải tư"):
-                for j, num in enumerate(numbers):
-                    result[f'G4_{j+1}'] = num
-            elif label.startswith("Giải năm"):
-                for j, num in enumerate(numbers):
-                    result[f'G5_{j+1}'] = num
-            elif label.startswith("Giải sáu"):
-                for j, num in enumerate(numbers):
-                    result[f'G6_{j+1}'] = num
-            elif label.startswith("Giải bảy"):
-                for j, num in enumerate(numbers):
-                    result[f'G7_{j+1}'] = num
-        print("DEBUG data xosomn:", result)
-        return result
-    except Exception as e:
-        print(f"[xosomn.mobi] Lỗi: {e}")
-        return None
-
-def crawl_xsmb_multi_source(date_dt):
-    result = crawl_xsmb_xosoketqua(date_dt)
-    if result:
-        print(f"Lấy thành công từ xosoketqua.com: {result['date']}")
-        return result
-    result = crawl_xsmb_xosomn(date_dt)
-    if result:
-        print(f"Lấy thành công từ xosomn.mobi: {result['date']}")
-        return result
-    print(f"LỖI: Không crawl được ngày {date_dt.strftime('%Y-%m-%d')} ở mọi nguồn!")
-    return None
-
-def crawl_xsmb_to_csv(csv_path='xs_mienbac_full.csv', days=30, notify_if_duplicate=False):
-    try:
-        print("[Crawl] Đang lấy 30 ngày từ xsmn.mobi...")
-        path, newest_date = crawl_xsmb_30ngay_xsmnmobi(csv_path)
-        print("[Crawl] Đã lấy thành công 30 ngày mới nhất từ xsmn.mobi.")
-        return True, path, newest_date
-    except Exception as e:
-        print(f"[Crawl] Lỗi khi crawl xsmn.mobi: {e}")
-        print("[Crawl] Thử lấy từng ngày từng nguồn dự phòng...")
-    last_date = None
-    if os.path.exists(csv_path):
-        try:
-            df_old = pd.read_csv(csv_path)
-            if not df_old.empty and 'date' in df_old.columns:
-                last_date = max(df_old['date'])
-        except Exception:
-            pass
-    data = []
-    is_new = False
     for i in range(days):
         date_dt = datetime.today() - timedelta(days=i)
-        date_str_csv = date_dt.strftime("%Y-%m-%d")
-        if i == 0 and last_date == date_str_csv:
-            if notify_if_duplicate:
-                print("[Crawl] Ngày hôm nay đã có trong file CSV, không crawl thêm.")
-            break
-        r = crawl_xsmb_multi_source(date_dt)
-        if r:
-            data.append(r)
-            if i == 0: is_new = True
-        else:
-            print(f"[Crawl] Bỏ qua ngày {date_str_csv} vì không lấy được.")
-    if not data:
-        raise Exception("Không crawl được dữ liệu nào ở mọi nguồn.")
-    if os.path.exists(csv_path):
+        date_str_url = date_dt.strftime("%d-%m-%Y")
+        url = f"https://www.minhngoc.net.vn/ket-qua-xo-so/mien-bac/{date_str_url}.html"
         try:
-            df_old = pd.read_csv(csv_path)
-            df_new = pd.DataFrame(data)
-            df_all = pd.concat([df_new, df_old], ignore_index=True).drop_duplicates(subset=['date'], keep='first')
-        except Exception:
-            df_all = pd.DataFrame(data)
+            resp = requests.get(url, timeout=15, headers=HEADERS)
+            soup = BeautifulSoup(resp.text, "html.parser")
+            table = soup.find("table", {"id": "mb_kq_table"})
+            if not table:
+                print(f"[minhngoc] Không tìm thấy table ngày {date_str_url}")
+                continue
+            result = {'date': date_dt.strftime("%Y-%m-%d")}
+            for tr in table.find_all("tr"):
+                tds = tr.find_all("td")
+                if len(tds) < 2: continue
+                label = tds[0].get_text(strip=True)
+                nums = tds[1].get_text(strip=True).replace('\n', '').replace(' ', '-')
+                if label.startswith("ĐB"):
+                    result["DB"] = nums
+                elif label.startswith("Nhất"):
+                    result["G1"] = nums
+                elif label.startswith("Nhì"):
+                    result["G2"] = nums
+                elif label.startswith("Ba"):
+                    result["G3"] = nums
+                elif label.startswith("Tư"):
+                    result["G4"] = nums
+                elif label.startswith("Năm"):
+                    result["G5"] = nums
+                elif label.startswith("Sáu"):
+                    result["G6"] = nums
+                elif label.startswith("Bảy"):
+                    result["G7"] = nums
+            data.append(result)
+        except Exception as e:
+            print(f"[minhngoc] Lỗi ngày {date_str_url}: {e}")
+    if data:
+        pd.DataFrame(data).to_csv(csv_path, index=False, encoding='utf-8-sig')
+        return True, csv_path, data[0]['date']
     else:
-        df_all = pd.DataFrame(data)
-    df_all = df_all.sort_values('date', ascending=False)
-    df_all.to_csv(csv_path, index=False, encoding='utf-8-sig')
-    return is_new, csv_path, data[0]['date']
+        raise Exception("Không crawl được dữ liệu nào từ minhngoc.net.vn!")
 
 # ==== BOT SETUP ====
 load_dotenv()
 TOKEN = os.getenv("DISCORD_TOKEN")
 CHANNEL_ID = int(os.getenv("NOTIFY_CHANNEL_ID", "0"))
-GUILD_ID = int(os.getenv("GUILD_ID", "0"))  # Thay bằng ID server của bạn
+GUILD_ID = int(os.getenv("GUILD_ID", "0"))  # Thay bằng ID server của bạn nếu muốn sync lệnh nhanh hơn
 
 intents = discord.Intents.default()
 bot = commands.Bot(command_prefix="!", intents=intents)
 
-@app_commands.command(name="crawl_xsmb", description="(Admin) Crawl dữ liệu XSMB mới nhất (ưu tiên xsmn.mobi)")
+@app_commands.command(name="crawl_xsmb", description="(Admin) Crawl dữ liệu XSMB từ minhngoc.net.vn (30 ngày)")
 async def crawl_xsmb(interaction: discord.Interaction):
     if not interaction.user.guild_permissions.administrator:
         await interaction.response.send_message("Bạn không có quyền sử dụng lệnh này.", ephemeral=True)
         return
-    await interaction.response.send_message(f"Đang crawl dữ liệu XSMB mới nhất...", ephemeral=True)
+    await interaction.response.send_message("Đang crawl dữ liệu XSMB mới nhất từ minhngoc.net.vn...", ephemeral=True)
     try:
-        is_new, path, newest_date = crawl_xsmb_to_csv('xs_mienbac_full.csv', 30)
-        if is_new:
-            await interaction.followup.send(f"✅ Đã crawl xong dữ liệu mới nhất ({newest_date}), lưu vào `{path}`.", ephemeral=True)
-        else:
-            await interaction.followup.send(f"ℹ️ Dữ liệu ngày hôm nay đã tồn tại trong file `{path}`, không crawl thêm.", ephemeral=True)
+        is_new, path, newest_date = crawl_xsmb_minhngoc('xsmb_minhngoc.csv', 30)
+        await interaction.followup.send(f"✅ Đã crawl xong dữ liệu ({newest_date}), lưu vào `{path}`.", ephemeral=True)
     except Exception as e:
         await interaction.followup.send(f"❌ Lỗi crawl: {e}", ephemeral=True)
 
-@app_commands.command(name="download_xsmb", description="(Admin) Gửi file CSV dữ liệu XSMB mới nhất")
+@app_commands.command(name="download_xsmb", description="(Admin) Tải file CSV dữ liệu XSMB mới nhất")
 async def download_xsmb(interaction: discord.Interaction):
     if not interaction.user.guild_permissions.administrator:
         await interaction.response.send_message("Bạn không có quyền sử dụng lệnh này.", ephemeral=True)
         return
-    csv_path = 'xs_mienbac_full.csv'
+    csv_path = 'xsmb_minhngoc.csv'
     if os.path.exists(csv_path):
         await interaction.response.send_message("Đây là file dữ liệu XSMB mới nhất:", ephemeral=True)
         await interaction.followup.send(file=discord.File(csv_path), ephemeral=True)
     else:
         await interaction.response.send_message("⚠️ File dữ liệu chưa tồn tại!", ephemeral=True)
 
-@app_commands.command(name="crawl_truyenthong", description="(Admin) Crawl XSMB truyền thống (backup nhiều năm)")
-async def crawl_truyenthong(interaction: discord.Interaction, max_rows: int = 500):
-    if not interaction.user.guild_permissions.administrator:
-        await interaction.response.send_message("Bạn không có quyền sử dụng lệnh này.", ephemeral=True)
-        return
-    await interaction.response.send_message(f"Đang crawl dữ liệu XSMB truyền thống (tối đa {max_rows} ngày)...", ephemeral=True)
-    try:
-        path, newest_date = crawl_xsmb_truyen_thong_xsmnmobi('xsmb_truyenthong.csv', max_rows)
-        await interaction.followup.send(f"✅ Đã crawl xong dữ liệu, lưu vào `{path}`. Ngày mới nhất: {newest_date}", ephemeral=True)
-    except Exception as e:
-        await interaction.followup.send(f"❌ Lỗi crawl: {e}", ephemeral=True)
-
 @tasks.loop(hours=24)
 async def auto_crawl_xsmb():
     print("[Auto Crawl] Đang crawl dữ liệu XSMB tự động...")
     try:
-        is_new, path, crawl_date = crawl_xsmb_to_csv('xs_mienbac_full.csv', 30, notify_if_duplicate=True)
+        is_new, path, crawl_date = crawl_xsmb_minhngoc('xsmb_minhngoc.csv', 30)
         now = datetime.now().strftime('%d-%m-%Y %H:%M')
-        print(f"[Auto Crawl] {'Crawl mới' if is_new else 'Đã tồn tại'} | {now}")
+        print(f"[Auto Crawl] Đã crawl dữ liệu | {now}")
         if is_new and CHANNEL_ID:
             channel = bot.get_channel(CHANNEL_ID)
             if channel:
-                await channel.send(f"✅ Đã tự động crawl XSMB và cập nhật dữ liệu mới nhất ({crawl_date})!")
-        elif not is_new:
-            print("[Auto Crawl] Đã có dữ liệu ngày mới, không crawl thêm.")
+                await channel.send(f"✅ Đã tự động crawl XSMB ({crawl_date}) từ minhngoc.net.vn!")
     except Exception as e:
         print(f"[Auto Crawl] Lỗi: {e}")
 
@@ -323,7 +118,6 @@ async def before_auto_crawl():
 
 bot.tree.add_command(crawl_xsmb)
 bot.tree.add_command(download_xsmb)
-bot.tree.add_command(crawl_truyenthong)
 
 @bot.event
 async def on_ready():
