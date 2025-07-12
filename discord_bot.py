@@ -8,18 +8,15 @@ from bs4 import BeautifulSoup
 import pandas as pd
 from datetime import datetime, timedelta
 
-# === Crawl 30 ngày từ xsmn.mobi ===
+# === Crawl 30 ngày từ xsmn.mobi với DEBUG ===
 def crawl_xsmb_30ngay_xsmnmobi(csv_path='xs_mienbac_full.csv'):
     url = "https://xsmn.mobi/xsmb-30-ngay.html"
     resp = requests.get(url, timeout=15)
     soup = BeautifulSoup(resp.text, "html.parser")
     table = soup.find("table", {"class": "kqtinh"})
     if not table:
-        print("DEBUG HTML:", soup.prettify()[:1500]) # In ra 1500 ký tự đầu HTML
+        print("\n====== DEBUG HTML (30 ngày) ======\n", soup.prettify()[:2000])
         raise Exception("Không tìm thấy bảng kết quả!")
-    # ...
-    print("DEBUG data:", data[:3])
-
     data = []
     trs = table.find_all("tr")
     for row in trs[1:]:
@@ -37,7 +34,9 @@ def crawl_xsmb_30ngay_xsmnmobi(csv_path='xs_mienbac_full.csv'):
         result['G6'] = tds[7].text.strip()
         result['G7'] = tds[8].text.strip()
         data.append(result)
-    # Chuẩn hóa ngày sang YYYY-MM-DD
+    print("DEBUG data 30ngay:", data[:2])
+    if not data:
+        raise Exception("Không lấy được dữ liệu nào từ bảng!")
     for row in data:
         try:
             d = datetime.strptime(row['date'], "%d/%m/%Y")
@@ -46,15 +45,16 @@ def crawl_xsmb_30ngay_xsmnmobi(csv_path='xs_mienbac_full.csv'):
             pass
     df = pd.DataFrame(data)
     df.to_csv(csv_path, index=False, encoding='utf-8-sig')
-    return csv_path, data[0]['date'] if data else None
+    return csv_path, data[0]['date']
 
-# === Crawl truyền thống backup lâu năm ===
+# === Crawl truyền thống backup lâu năm với DEBUG ===
 def crawl_xsmb_truyen_thong_xsmnmobi(csv_path='xsmb_truyenthong.csv', max_rows=1000):
     url = "https://xsmn.mobi/so-ket-qua-truyen-thong.html"
     resp = requests.get(url, timeout=20)
     soup = BeautifulSoup(resp.text, "html.parser")
     table = soup.find("table", {"class": "kqtinh"})
     if not table:
+        print("\n====== DEBUG HTML (truyền thống) ======\n", soup.prettify()[:2000])
         raise Exception("Không tìm thấy bảng kết quả truyền thống!")
     data = []
     trs = table.find_all("tr")
@@ -75,7 +75,9 @@ def crawl_xsmb_truyen_thong_xsmnmobi(csv_path='xsmb_truyenthong.csv', max_rows=1
         data.append(result)
         if len(data) >= max_rows:
             break
-    # Chuẩn hóa ngày sang YYYY-MM-DD
+    print("DEBUG data truyenthong:", data[:2])
+    if not data:
+        raise Exception("Không lấy được dữ liệu nào từ bảng truyền thống!")
     for row in data:
         try:
             d = datetime.strptime(row['date'], "%d/%m/%Y")
@@ -84,7 +86,7 @@ def crawl_xsmb_truyen_thong_xsmnmobi(csv_path='xsmb_truyenthong.csv', max_rows=1
             pass
     df = pd.DataFrame(data)
     df.to_csv(csv_path, index=False, encoding='utf-8-sig')
-    return csv_path, data[0]['date'] if data else None
+    return csv_path, data[0]['date']
 
 # === Fallback từng ngày từng nguồn ===
 def crawl_xsmb_xosoketqua(date_dt):
@@ -95,6 +97,7 @@ def crawl_xsmb_xosoketqua(date_dt):
         soup = BeautifulSoup(resp.text, "html.parser")
         table = soup.find("table", {"id": "result_tab_mb"})
         if not table:
+            print("[DEBUG] Không tìm thấy bảng result_tab_mb trên xosoketqua!")
             return None
         result = {'date': date_dt.strftime("%Y-%m-%d")}
         trs = table.find_all("tr")
@@ -126,6 +129,7 @@ def crawl_xsmb_xosoketqua(date_dt):
             elif label.startswith("Bảy"):
                 for j, num in enumerate(numbers):
                     result[f'G7_{j+1}'] = num
+        print("DEBUG data xosoketqua:", result)
         return result
     except Exception as e:
         print(f"[xosoketqua] Lỗi: {e}")
@@ -139,6 +143,7 @@ def crawl_xsmb_xosomn(date_dt):
         soup = BeautifulSoup(resp.text, "html.parser")
         table = soup.find("table", {"class": "bkqmienbac"})
         if not table:
+            print("[DEBUG] Không tìm thấy bảng bkqmienbac trên xosomn.mobi!")
             return None
         result = {'date': date_dt.strftime("%Y-%m-%d")}
         trs = table.find_all("tr")
@@ -170,6 +175,7 @@ def crawl_xsmb_xosomn(date_dt):
             elif label.startswith("Giải bảy"):
                 for j, num in enumerate(numbers):
                     result[f'G7_{j+1}'] = num
+        print("DEBUG data xosomn:", result)
         return result
     except Exception as e:
         print(f"[xosomn.mobi] Lỗi: {e}")
@@ -219,6 +225,8 @@ def crawl_xsmb_to_csv(csv_path='xs_mienbac_full.csv', days=30, notify_if_duplica
             if i == 0: is_new = True
         else:
             print(f"[Crawl] Bỏ qua ngày {date_str_csv} vì không lấy được.")
+    if not data:
+        raise Exception("Không crawl được dữ liệu nào ở mọi nguồn.")
     if os.path.exists(csv_path):
         try:
             df_old = pd.read_csv(csv_path)
@@ -230,7 +238,7 @@ def crawl_xsmb_to_csv(csv_path='xs_mienbac_full.csv', days=30, notify_if_duplica
         df_all = pd.DataFrame(data)
     df_all = df_all.sort_values('date', ascending=False)
     df_all.to_csv(csv_path, index=False, encoding='utf-8-sig')
-    return is_new, csv_path, data[0]['date'] if data else None
+    return is_new, csv_path, data[0]['date']
 
 # ==== BOT SETUP ====
 load_dotenv()
@@ -241,7 +249,6 @@ GUILD_ID = int(os.getenv("GUILD_ID", "0"))  # Thay bằng ID server của bạn
 intents = discord.Intents.default()
 bot = commands.Bot(command_prefix="!", intents=intents)
 
-# Slash Command ĐỊNH NGHĨA NGOÀI COG, PHẢI ĐĂNG KÝ THỦ CÔNG!
 @app_commands.command(name="crawl_xsmb", description="(Admin) Crawl dữ liệu XSMB mới nhất (ưu tiên xsmn.mobi)")
 async def crawl_xsmb(interaction: discord.Interaction):
     if not interaction.user.guild_permissions.administrator:
@@ -284,15 +291,18 @@ async def crawl_truyenthong(interaction: discord.Interaction, max_rows: int = 50
 @tasks.loop(hours=24)
 async def auto_crawl_xsmb():
     print("[Auto Crawl] Đang crawl dữ liệu XSMB tự động...")
-    is_new, path, crawl_date = crawl_xsmb_to_csv('xs_mienbac_full.csv', 30, notify_if_duplicate=True)
-    now = datetime.now().strftime('%d-%m-%Y %H:%M')
-    print(f"[Auto Crawl] {'Crawl mới' if is_new else 'Đã tồn tại'} | {now}")
-    if is_new and CHANNEL_ID:
-        channel = bot.get_channel(CHANNEL_ID)
-        if channel:
-            await channel.send(f"✅ Đã tự động crawl XSMB và cập nhật dữ liệu mới nhất ({crawl_date})!")
-    elif not is_new:
-        print("[Auto Crawl] Đã có dữ liệu ngày mới, không crawl thêm.")
+    try:
+        is_new, path, crawl_date = crawl_xsmb_to_csv('xs_mienbac_full.csv', 30, notify_if_duplicate=True)
+        now = datetime.now().strftime('%d-%m-%Y %H:%M')
+        print(f"[Auto Crawl] {'Crawl mới' if is_new else 'Đã tồn tại'} | {now}")
+        if is_new and CHANNEL_ID:
+            channel = bot.get_channel(CHANNEL_ID)
+            if channel:
+                await channel.send(f"✅ Đã tự động crawl XSMB và cập nhật dữ liệu mới nhất ({crawl_date})!")
+        elif not is_new:
+            print("[Auto Crawl] Đã có dữ liệu ngày mới, không crawl thêm.")
+    except Exception as e:
+        print(f"[Auto Crawl] Lỗi: {e}")
 
 @auto_crawl_xsmb.before_loop
 async def before_auto_crawl():
@@ -303,7 +313,6 @@ async def before_auto_crawl():
         target += timedelta(days=1)
     await discord.utils.sleep_until(target)
 
-# ĐĂNG KÝ LỆNH SLASH VÀO TREE
 bot.tree.add_command(crawl_xsmb)
 bot.tree.add_command(download_xsmb)
 bot.tree.add_command(crawl_truyenthong)
