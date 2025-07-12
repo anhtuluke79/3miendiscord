@@ -15,7 +15,11 @@ def crawl_xsmb_30ngay_xsmnmobi(csv_path='xs_mienbac_full.csv'):
     soup = BeautifulSoup(resp.text, "html.parser")
     table = soup.find("table", {"class": "kqtinh"})
     if not table:
+        print("DEBUG HTML:", soup.prettify()[:1500]) # In ra 1500 ký tự đầu HTML
         raise Exception("Không tìm thấy bảng kết quả!")
+    # ...
+    print("DEBUG data:", data[:3])
+
     data = []
     trs = table.find_all("tr")
     for row in trs[1:]:
